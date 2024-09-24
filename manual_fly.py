@@ -4,6 +4,7 @@ import time
 
 #TODO: usage of sendControl() to send controls to drone
 #TODO: on release key stopping
+
 def main():
 
     print("Hello, World!")
@@ -46,6 +47,7 @@ def main():
         if curr_time != last_time:
             data = drone.get_position_data()
             print(data)
+            print(drone.get_front_range())
             last_time = curr_time
         drone.hover(0)
 
