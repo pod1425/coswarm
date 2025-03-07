@@ -5,12 +5,15 @@ from serial.tools import list_ports
 from codrone_edu.drone import *
 from time import sleep
 
+from swarm.graphing import get_graph_points
+
 
 class DroneControl:
 
     def __init__(self):
         self.drones = []
         self.num_drones = 0
+        self.global_height = 1
 
     def worker(self, drone: Drone, task_queue: Queue):
         while True:
@@ -103,11 +106,17 @@ class DroneControl:
             elif degree < 0:
                 q.put(drone.turn_left, (degree))
 
+    def form_shape(self, fx, max_distance, velocity):
+        coords = get_graph_points(fx, -max_distance / 2, max_distance /2, self.drones.count())
+
+        for i in range(self.drones.count()):
+            drone = self.drones[i].drone
+            self.drones[i].drone_queue.put(drone.goto_waypoint, [coords[0], self.global_height, coords[1]])
+
 
     def manual_fly(self, drone: Drone):
         power = 30
         duration = 0.1
-
 
         if keyboard.is_pressed('w'):
             drone.set_pitch(power)
