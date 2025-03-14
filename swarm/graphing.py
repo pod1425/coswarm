@@ -137,3 +137,6 @@ def get_graph_points(fx, x_start, x_end, num_points):
 
     # Return list of coordinate pairs
     return list(zip(x_values, y_values))
+
+def approx_equals(ideal: float, actual: float, tolerance: float):
+    return ideal - tolerance < actual < ideal + tolerance

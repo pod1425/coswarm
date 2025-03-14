@@ -9,8 +9,5 @@ if control.auto_connect() != 0:
     print("Exiting...")
     exit(0)
 
-control.all_takeoff()
-control.all_move_forward(50)
 control.all_land()
-
 control.close_all()

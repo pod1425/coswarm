@@ -7,7 +7,7 @@ from serial.tools import list_ports
 from codrone_edu.drone import *
 from time import sleep
 
-from swarm.graphing import get_graph_points
+from swarm.graphing import get_graph_points, approx_equals
 
 
 class DroneControl:
@@ -86,8 +86,9 @@ class DroneControl:
     def close_all(self):
         for drone, _, drone_queue, _ in self.drones:
             drone_queue.put(None)
-        for drone, _, _, _ in self.drones:
+        for drone, thread, _, _ in self.drones:
             drone.close()
+            thread.join()
 
 
     def all_takeoff(self, drones: list[string]=None):
@@ -104,14 +105,25 @@ class DroneControl:
         sleep(4)
 
 
-    def all_move(self, r, p, y, t, seconds, drones: list[string]=None):
+    def all_move(self, roll, pitch, yaw, throttle, seconds, drones: list[string]=None):
+        '''
+
+        :param roll:  left/right
+        :param pitch: forward/backward
+        :param yaw: rotation
+        :param throttle: up/down
+        :param seconds: time
+        :param drones: affected drones
+        :return:
+        '''
+
         affected_drones = self._getAffectedDrones(drones)
         timeout = seconds
         init_time = time.time()
 
         while time.time() - init_time < timeout:
             for drone, _, q, _ in affected_drones:
-                q.put((drone.sendControl, (r, p, y, t)))
+                q.put((drone.sendControl, (roll, pitch, yaw, throttle)))
                 sleep(0.05)
 
 
@@ -134,13 +146,66 @@ class DroneControl:
             elif degree < 0:
                 q.put((drone.turn_left, (degree)))
 
+    def all_move_forward(self, distance, units="cm", speed=0.5, drones: list[string]=None):
+        affected_drones = self._getAffectedDrones(drones)
+        for drone, _, q, _ in affected_drones:
+            q.put((drone.move_forward, (distance, units, speed)))
+
+    def all_move_backward(self, distance, units="cm", speed=0.5, drones: list[str] = None):
+        affected_drones = self._getAffectedDrones(drones)
+        for drone, _, q, _ in affected_drones:
+            q.put((drone.move_backward, (distance, units, speed)))
+
+    def all_move_left(self, distance, units="cm", speed=0.5, drones: list[str] = None):
+        affected_drones = self._getAffectedDrones(drones)
+        for drone, _, q, _ in affected_drones:
+            q.put((drone.move_left, (distance, units, speed)))
+
+    def all_move_right(self, distance, units="cm", speed=0.5, drones: list[str] = None):
+        affected_drones = self._getAffectedDrones(drones)
+        for drone, _, q, _ in affected_drones:
+            q.put((drone.move_right, (distance, units, speed)))
+
+    def all_change_throttle(self, power, time, drones: list[str] = None):
+        affected_drones = self._getAffectedDrones(drones)
+        for drone, _, q, _ in affected_drones:
+            q.put((drone.set_throttle, (power,)))
+            q.put((drone.move, (time,)))
+            q.put((drone.reset_move_values, (3,)))
+
+
+    def all_turn_left(self, degrees, speed=0.5, drones: list[str] = None):
+        affected_drones = self._getAffectedDrones(drones)
+        for drone, _, q, _ in affected_drones:
+            q.put((drone.turn_left, (degrees, speed)))
+
+    def all_turn_right(self, degrees, speed=0.5, drones: list[str] = None):
+        affected_drones = self._getAffectedDrones(drones)
+        for drone, _, q, _ in affected_drones:
+            q.put((drone.turn_right, (degrees, speed)))
+
     def form_shape(self, fx, max_distance, velocity, drones: list[string]=None):
         affected_drones = self._getAffectedDrones(drones)
         coords = get_graph_points(fx, -max_distance / 2, max_distance /2, affected_drones.count())
 
-        for i in range(affected_drones.count()):
+        for i in range(len(affected_drones)):
             drone = affected_drones[i].drone
             affected_drones[i].drone_queue.put((drone.goto_waypoint, [coords[0], self.global_height, coords[1]]))
+
+    def all_goto_height(self, height, speed: int=30, drones: list[string]=None):
+        affected_drones = self._getAffectedDrones(drones)
+
+        for drone, _, q, _ in affected_drones:
+            q.put((_maintain_height, (drone, height, speed)))
+
+
+
+    def await_standby(self, drones: list[string]=None):
+        affected_drones = self._getAffectedDrones(drones)
+
+        for _, _, q, _ in affected_drones:
+            q.join()
+
 
 
     def manual_fly(self, drone: Drone):
@@ -171,3 +236,19 @@ class DroneControl:
         if keyboard.is_pressed('r'):
             drone.set_throttle(power)
             drone.move(duration)
+
+
+def _maintain_height(drone: Drone, height: float, speed: int):
+    drone_height = drone.get_height('m')
+    while not approx_equals(height, drone_height, height * 0.1 if height > 1 else 0.1):
+        drone_height = drone.get_height('m')
+        if drone_height >= 9.98:
+            continue
+        if drone_height > height:
+            drone.set_throttle(-speed)
+            drone.move(0.2)
+        elif drone_height < height:
+            drone.set_throttle(speed)
+            drone.move(0.2)
+
+        drone.hover(0.1)
